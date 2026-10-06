@@ -9,6 +9,7 @@ always next to the band's name and an icon.
 
 from __future__ import annotations
 
+import html
 import json
 import statistics
 from datetime import date
@@ -209,7 +210,8 @@ def _day_ticks(theme: str) -> dict:
 def _tooltip(labels: list[str]) -> dict:
     """Axis tooltip whose text is computed here, so no chart logic lives in JS.
     The ':' prefix makes NiceGUI evaluate the value as JavaScript."""
-    return {"trigger": "axis", ":formatter": f"p => {json.dumps(labels)}[p[0].dataIndex]"}
+    safe = [html.escape(str(label)) for label in labels]  # ECharts renders tooltips as HTML
+    return {"trigger": "axis", ":formatter": f"p => {json.dumps(safe)}[p[0].dataIndex]"}
 
 
 def _fmt(v, unit: str) -> str:

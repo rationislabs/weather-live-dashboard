@@ -73,3 +73,30 @@ async def test_null_pollen_hides_tiles(user: User, api_routes, fx) -> None:
     await user.open("/?city=Vienna")
     await user.should_see("European AQI")
     await user.should_not_see("pollen")
+
+
+async def test_a_slow_endpoint_does_not_blank_the_page(user: User, api_routes, fx) -> None:
+    """NiceGUI fails a page that takes more than 3 s to build; the panels must
+    fill in after the page is sent, so one slow API never blanks it."""
+    import asyncio
+
+    async def slow(request):
+        await asyncio.sleep(3.5)
+        return httpx.Response(200, json=fx("air_vienna"))
+
+    api_routes["air"].mock(side_effect=slow)
+    await user.open("/?city=Vienna")
+    await user.should_see("How sure is the forecast?")
+
+
+async def test_a_broken_answer_fails_only_its_panel(user: User, api_routes, fx) -> None:
+    forecast = fx("forecast_vienna")
+    forecast["current"]["temperature_2m"] = None
+    api_routes["forecast"].mock(return_value=httpx.Response(200, json=forecast))
+    air = fx("air_vienna")
+    del air["hourly"]
+    api_routes["air"].mock(return_value=httpx.Response(200, json=air))
+    await user.open("/?city=Vienna")
+    await user.should_see("Couldn't load current conditions.")
+    await user.should_see("Couldn't load air quality.")
+    await user.should_see("How sure is the forecast?")

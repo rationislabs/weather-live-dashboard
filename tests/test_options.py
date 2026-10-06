@@ -79,3 +79,20 @@ def test_hourly_axes_label_days_only_and_hide_overlaps(fx):
         assert label["hideOverlap"] is True and label[":formatter"] == "v => v.slice(0, 6)"
     fan = charts.fan_option(pct, "metric", "light")
     assert fan["grid"]["top"] >= 56, "legend needs its own row above the axis title"
+
+
+def test_tooltip_text_is_html_escaped(fx):
+    """ECharts renders tooltip text as HTML."""
+    daily = fx("forecast_vienna")["daily"]
+    daily["precipitation_probability_max"][0] = "<img src=x onerror=alert(1)>"
+    formatter = charts.precip_option(daily, "light")["tooltip"][":formatter"]
+    assert "<img" not in formatter and "&lt;img" in formatter
+
+
+def test_search_throttle_is_enforced_on_the_server():
+    from weather_live import openmeteo as om
+
+    seen: dict = {}
+    assert om.allow_search(seen, now=100.0) is True
+    assert om.allow_search(seen, now=100.2) is False
+    assert om.allow_search(seen, now=100.5) is True

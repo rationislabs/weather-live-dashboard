@@ -68,7 +68,9 @@ class Cache:
             task = asyncio.create_task(self._refresh(key, fetch))
             self._inflight[key] = task
             task.add_done_callback(lambda _done: self._inflight.pop(key, None))
-        return await task
+        # shield: a visitor who leaves cancels only their own wait, never the
+        # shared fetch the other visitors are waiting on.
+        return await asyncio.shield(task)
 
     async def _refresh(self, key: tuple, fetch) -> Result:
         try:
@@ -248,3 +250,14 @@ def city_from_timezone(tz: str) -> str | None:
     if "/" not in tz or tz.startswith("Etc/"):
         return None
     return tz.rsplit("/", 1)[1].replace("_", " ")
+
+
+SEARCH_GAP = 0.3  # seconds; the browser throttles at 0.4, this holds if a client does not
+
+
+def allow_search(seen: dict, now: float) -> bool:
+    """Server-side search throttle for one client (`seen` lives with the client)."""
+    if now - seen.get("last", float("-inf")) < SEARCH_GAP:
+        return False
+    seen["last"] = now
+    return True

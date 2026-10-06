@@ -113,3 +113,23 @@ async def test_size_cap_evicts_the_oldest():
     calls, fetch = counting()
     await cache.get(("forecast", 1), fetch)
     assert calls["n"] == 1, "key 1 should have been evicted"
+
+
+async def test_a_cancelled_waiter_does_not_break_the_others():
+    """A visitor who leaves mid-request must not cancel the shared fetch."""
+    _, clock = clock_at()
+    cache = om.Cache(900, 21600, 10, clock)
+    gate = asyncio.Event()
+
+    async def slow():
+        await gate.wait()
+        return {"v": 1}
+
+    leaver = asyncio.create_task(cache.get(("forecast", 1), slow))
+    stayer = asyncio.create_task(cache.get(("forecast", 1), slow))
+    await asyncio.sleep(0.01)
+    leaver.cancel()
+    await asyncio.sleep(0.01)
+    gate.set()
+    assert (await stayer).data == {"v": 1}
+    assert len(cache) == 1, "the result was not cached"

@@ -6,6 +6,9 @@ exactly the same view: /?city=Graz&units=imperial&theme=dark
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -14,6 +17,8 @@ from nicegui import app, ui
 
 from . import charts, config
 from . import openmeteo as om
+
+log = logging.getLogger(__name__)
 
 api: om.OpenMeteo | None = None
 
@@ -49,6 +54,14 @@ async def resolve(text: str, default: str) -> tuple[om.Place | None, str]:
     return await _find(default), notice
 
 
+async def _quietly(coro) -> None:
+    """A cache warm-up whose failure the panel itself will report."""
+    try:
+        await coro
+    except om.UpstreamError:
+        pass
+
+
 def stamp(result: om.Result, offset_seconds: int) -> str:
     """Fetch time in the city's own time zone."""
     at = datetime.fromtimestamp(result.fetched_at, timezone(timedelta(seconds=offset_seconds)))
@@ -60,18 +73,22 @@ def panel(what: str, load: Callable[[], Awaitable[om.Result]], render: Callable[
 
     @ui.refreshable
     async def body() -> None:
+        box = ui.column().classes("w-full gap-2")
         try:
             result = await load()
-        except om.UpstreamError:
-            with ui.row().classes("items-center"):
+            with box:
+                render(result)
+                if result.stale:  # served from the cache after a failed refresh
+                    ui.label(stamp(result, result.data.get("utc_offset_seconds", 0))).classes(
+                        "text-sm opacity-70"
+                    )
+        except Exception as e:  # noqa: BLE001 — an outage or a malformed answer: this panel only
+            if not isinstance(e, om.UpstreamError):
+                log.warning("could not render %s: %r", what, e)
+            box.clear()
+            with box, ui.row().classes("items-center"):
                 ui.label(f"Couldn't load {what}.")
                 ui.button("Retry", on_click=body.refresh).props("flat")
-            return
-        render(result)
-        if result.stale:  # served from the cache after a failed refresh
-            ui.label(stamp(result, result.data.get("utc_offset_seconds", 0))).classes(
-                "text-sm opacity-70"
-            )
 
     return body
 
@@ -100,7 +117,11 @@ def header(place: om.Place | None, units: str, theme: str) -> None:
             box = ui.input(placeholder="Search a city").props("dense clearable")
             hits = ui.column().classes("gap-0")
 
+        seen: dict = {}  # this client's last search, for the server-side throttle
+
         async def suggest() -> None:
+            if not om.allow_search(seen, time.monotonic()):
+                return
             hits.clear()
             text = (box.value or "").strip()
             if len(text) < 2:
@@ -232,6 +253,12 @@ async def index(city: str = "", units: str = "metric", theme: str = "light") -> 
     theme = theme if theme in charts.PALETTE else "light"
     ui.dark_mode(theme == "dark")
     ui.query("body").style(f"background: {charts.PALETTE[theme]['surface']}")
+    # Send the page now and fill it in over the websocket: NiceGUI fails a page
+    # that takes longer than 3 s to build, and a slow API must never do that.
+    try:
+        await ui.context.client.connected()
+    except TimeoutError:  # a client without JavaScript (a healthcheck): nothing to fill in
+        return
 
     place, notice = await resolve(city, settings.default_city)
     with ui.column().classes("w-full max-w-5xl mx-auto p-4 gap-6"):
@@ -244,14 +271,10 @@ async def index(city: str = "", units: str = "metric", theme: str = "light") -> 
             footer()
             return
 
-        # Warm the cache in parallel; each panel then reads its own result and
-        # fails on its own.
-        await asyncio.gather(
-            api.forecast(place, units),
-            api.ensemble(place, units),
-            api.air(place),
-            return_exceptions=True,
-        )
+        # Start all three fetches at once; each panel then joins its own fetch
+        # (single flight) and fails on its own, without waiting for the others.
+        for warm in (api.forecast(place, units), api.ensemble(place, units), api.air(place)):
+            asyncio.create_task(_quietly(warm))
         now = panel(
             "current conditions", lambda: api.forecast(place, units), lambda r: render_now(r, units)
         )
@@ -282,6 +305,7 @@ async def index(city: str = "", units: str = "metric", theme: str = "light") -> 
                 return
             guess = om.city_from_timezone(tz or "")
             if guess and guess.lower() != settings.default_city.lower() and await _find(guess):
-                ui.navigate.to(url(guess, units, theme))
+                # replace, not push: Back must leave the site, not land here again
+                ui.run_javascript(f"location.replace({json.dumps(url(guess, units, theme))})")
 
         ui.timer(0.1, from_browser, once=True)
