@@ -1,7 +1,35 @@
 from weather_live import charts
 
-WMO = (0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67,
-       71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99)
+WMO = (
+    0,
+    1,
+    2,
+    3,
+    45,
+    48,
+    51,
+    53,
+    55,
+    56,
+    57,
+    61,
+    63,
+    65,
+    66,
+    67,
+    71,
+    73,
+    75,
+    77,
+    80,
+    81,
+    82,
+    85,
+    86,
+    95,
+    96,
+    99,
+)
 
 
 def test_every_wmo_code_has_text_and_icon(fx):
@@ -14,9 +42,20 @@ def test_every_wmo_code_has_text_and_icon(fx):
 
 
 def test_aqi_bands_at_every_edge():
-    cases = {0: "Good", 20: "Good", 20.1: "Fair", 40: "Fair", 40.5: "Moderate",
-             60: "Moderate", 61: "Poor", 80: "Poor", 81: "Very poor", 100: "Very poor",
-             100.1: "Extremely poor", 500: "Extremely poor"}
+    cases = {
+        0: "Good",
+        20: "Good",
+        20.1: "Fair",
+        40: "Fair",
+        40.5: "Moderate",
+        60: "Moderate",
+        61: "Poor",
+        80: "Poor",
+        81: "Very poor",
+        100: "Very poor",
+        100.1: "Extremely poor",
+        500: "Extremely poor",
+    }
     for value, name in cases.items():
         assert charts.aqi_band(value)[0] == name, value
     assert charts.aqi_band(10)[1] == "good" and charts.aqi_band(150)[1] == "critical"
@@ -24,12 +63,19 @@ def test_aqi_bands_at_every_edge():
 
 
 def test_percentiles_on_known_values():
-    hourly = {"time": ["2026-10-05T00:00"],
-              "temperature_2m": [0.0],
-              **{f"temperature_2m_member{i:02d}": [float(i)] for i in range(1, 51)}}
+    hourly = {
+        "time": ["2026-10-05T00:00"],
+        "temperature_2m": [0.0],
+        **{f"temperature_2m_member{i:02d}": [float(i)] for i in range(1, 51)},
+    }
     pct = charts.ensemble_percentiles(hourly)
-    assert (pct["p10"][0], pct["p25"][0], pct["p50"][0], pct["p75"][0], pct["p90"][0]) == \
-        (5.0, 12.5, 25.0, 37.5, 45.0)
+    assert (pct["p10"][0], pct["p25"][0], pct["p50"][0], pct["p75"][0], pct["p90"][0]) == (
+        5.0,
+        12.5,
+        25.0,
+        37.5,
+        45.0,
+    )
 
 
 def test_percentiles_on_the_recording_are_ordered(fx):
@@ -40,8 +86,11 @@ def test_percentiles_on_the_recording_are_ordered(fx):
 
 
 def test_hours_with_missing_members_are_gaps():
-    hourly = {"time": ["2026-10-05T00:00"], "temperature_2m": [None],
-              "temperature_2m_member01": [3.0]}
+    hourly = {
+        "time": ["2026-10-05T00:00"],
+        "temperature_2m": [None],
+        "temperature_2m_member01": [3.0],
+    }
     assert charts.ensemble_percentiles(hourly)["p50"] == [None]
 
 
@@ -65,5 +114,7 @@ def test_spread_caption_names_the_first_doubling_day():
 def test_spread_caption_when_members_agree_and_when_short():
     assert charts.spread_caption(_pct([1, 1, 1, 1, 1, 1, 1])).startswith("The members agree")
     assert "covers 3 days" in charts.spread_caption(_pct([1, 1, 1]))
-    assert charts.spread_caption({"time": [], "p10": [], "p90": []}) == \
-        "No ensemble data for this place."
+    assert (
+        charts.spread_caption({"time": [], "p10": [], "p90": []})
+        == "No ensemble data for this place."
+    )

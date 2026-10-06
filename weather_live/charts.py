@@ -14,40 +14,81 @@ import statistics
 from datetime import date
 
 PALETTE: dict[str, dict[str, str]] = {
-    "light": {"surface": "#fcfcfb", "ink": "#0b0b0b", "ink2": "#52514e", "muted": "#898781",
-              "grid": "#e1e0d9", "axis": "#c3c2b7",
-              "outer": "#86b6ef", "inner": "#3987e5", "line": "#1c5cab"},
-    "dark": {"surface": "#1a1a19", "ink": "#ffffff", "ink2": "#c3c2b7", "muted": "#898781",
-             "grid": "#2c2c2a", "axis": "#383835",
-             "outer": "#184f95", "inner": "#2a78d6", "line": "#86b6ef"},
+    "light": {
+        "surface": "#fcfcfb",
+        "ink": "#0b0b0b",
+        "ink2": "#52514e",
+        "muted": "#898781",
+        "grid": "#e1e0d9",
+        "axis": "#c3c2b7",
+        "outer": "#86b6ef",
+        "inner": "#3987e5",
+        "line": "#1c5cab",
+    },
+    "dark": {
+        "surface": "#1a1a19",
+        "ink": "#ffffff",
+        "ink2": "#c3c2b7",
+        "muted": "#898781",
+        "grid": "#2c2c2a",
+        "axis": "#383835",
+        "outer": "#184f95",
+        "inner": "#2a78d6",
+        "line": "#86b6ef",
+    },
 }
 STATUS = {"good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b"}
-STATUS_ICON = {"good": "sentiment_satisfied", "warning": "sentiment_neutral",
-               "serious": "sentiment_dissatisfied", "critical": "warning"}
-UNIT_LABELS = {"metric": {"temp": "°C", "wind": "km/h", "precip": "mm"},
-               "imperial": {"temp": "°F", "wind": "mph", "precip": "in"}}
+STATUS_ICON = {
+    "good": "sentiment_satisfied",
+    "warning": "sentiment_neutral",
+    "serious": "sentiment_dissatisfied",
+    "critical": "warning",
+}
+UNIT_LABELS = {
+    "metric": {"temp": "°C", "wind": "km/h", "precip": "mm"},
+    "imperial": {"temp": "°F", "wind": "mph", "precip": "in"},
+}
 
 # WMO weather interpretation codes, as Open-Meteo documents them.
 WEATHER_CODES: dict[int, tuple[str, str]] = {
-    0: ("Clear sky", "wb_sunny"), 1: ("Mainly clear", "wb_sunny"),
-    2: ("Partly cloudy", "wb_cloudy"), 3: ("Overcast", "cloud"),
-    45: ("Fog", "blur_on"), 48: ("Freezing fog", "blur_on"),
-    51: ("Light drizzle", "grain"), 53: ("Drizzle", "grain"), 55: ("Dense drizzle", "grain"),
-    56: ("Light freezing drizzle", "grain"), 57: ("Freezing drizzle", "grain"),
-    61: ("Light rain", "water_drop"), 63: ("Rain", "water_drop"), 65: ("Heavy rain", "water_drop"),
-    66: ("Light freezing rain", "water_drop"), 67: ("Freezing rain", "water_drop"),
-    71: ("Light snow", "ac_unit"), 73: ("Snow", "ac_unit"), 75: ("Heavy snow", "ac_unit"),
+    0: ("Clear sky", "wb_sunny"),
+    1: ("Mainly clear", "wb_sunny"),
+    2: ("Partly cloudy", "wb_cloudy"),
+    3: ("Overcast", "cloud"),
+    45: ("Fog", "blur_on"),
+    48: ("Freezing fog", "blur_on"),
+    51: ("Light drizzle", "grain"),
+    53: ("Drizzle", "grain"),
+    55: ("Dense drizzle", "grain"),
+    56: ("Light freezing drizzle", "grain"),
+    57: ("Freezing drizzle", "grain"),
+    61: ("Light rain", "water_drop"),
+    63: ("Rain", "water_drop"),
+    65: ("Heavy rain", "water_drop"),
+    66: ("Light freezing rain", "water_drop"),
+    67: ("Freezing rain", "water_drop"),
+    71: ("Light snow", "ac_unit"),
+    73: ("Snow", "ac_unit"),
+    75: ("Heavy snow", "ac_unit"),
     77: ("Snow grains", "ac_unit"),
-    80: ("Light showers", "water_drop"), 81: ("Showers", "water_drop"),
+    80: ("Light showers", "water_drop"),
+    81: ("Showers", "water_drop"),
     82: ("Violent showers", "water_drop"),
-    85: ("Light snow showers", "ac_unit"), 86: ("Snow showers", "ac_unit"),
-    95: ("Thunderstorm", "thunderstorm"), 96: ("Thunderstorm with hail", "thunderstorm"),
+    85: ("Light snow showers", "ac_unit"),
+    86: ("Snow showers", "ac_unit"),
+    95: ("Thunderstorm", "thunderstorm"),
+    96: ("Thunderstorm with hail", "thunderstorm"),
     99: ("Thunderstorm with heavy hail", "thunderstorm"),
 }
 
 # European AQI bands; each upper edge belongs to its band (20 is Good).
-AQI_BANDS = ((20, "Good", "good"), (40, "Fair", "good"), (60, "Moderate", "warning"),
-             (80, "Poor", "serious"), (100, "Very poor", "critical"))
+AQI_BANDS = (
+    (20, "Good", "good"),
+    (40, "Fair", "good"),
+    (60, "Moderate", "warning"),
+    (80, "Poor", "serious"),
+    (100, "Very poor", "critical"),
+)
 
 # statistics.quantiles(n=20) returns 19 cut points at 5 %, 10 %, ... 95 %.
 QUANTILES = {"p10": 1, "p25": 4, "p50": 9, "p75": 14, "p90": 17}
@@ -68,8 +109,11 @@ def ensemble_percentiles(hourly: dict) -> dict[str, list]:
     """Per hour, the 10/25/50/75/90th percentile over every ensemble member
     (the control plus `temperature_2m_memberNN`, however many arrive). An hour
     with fewer than two values is a gap (None)."""
-    members = [v for k, v in hourly.items()
-               if k == "temperature_2m" or k.startswith("temperature_2m_member")]
+    members = [
+        v
+        for k, v in hourly.items()
+        if k == "temperature_2m" or k.startswith("temperature_2m_member")
+    ]
     out: dict[str, list] = {"time": list(hourly["time"]), **{q: [] for q in QUANTILES}}
     for i in range(len(hourly["time"])):
         values = [m[i] for m in members if m[i] is not None]
@@ -103,17 +147,23 @@ def spread_caption(pct: dict) -> str:
 
 FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif"
 
-DAILY_COLUMNS = [{"name": "day", "label": "Day", "field": "day", "align": "left"},
-                 {"name": "low", "label": "Low", "field": "low"},
-                 {"name": "high", "label": "High", "field": "high"},
-                 {"name": "rain", "label": "Chance of rain", "field": "rain"}]
-FAN_COLUMNS = [{"name": "day", "label": "Day", "field": "day", "align": "left"},
-               {"name": "low", "label": "Coldest likely (p10)", "field": "low"},
-               {"name": "median", "label": "Median", "field": "median"},
-               {"name": "high", "label": "Warmest likely (p90)", "field": "high"}]
-AQI_COLUMNS = [{"name": "time", "label": "Time", "field": "time", "align": "left"},
-               {"name": "aqi", "label": "European AQI", "field": "aqi"},
-               {"name": "band", "label": "Band", "field": "band"}]
+DAILY_COLUMNS = [
+    {"name": "day", "label": "Day", "field": "day", "align": "left"},
+    {"name": "low", "label": "Low", "field": "low"},
+    {"name": "high", "label": "High", "field": "high"},
+    {"name": "rain", "label": "Chance of rain", "field": "rain"},
+]
+FAN_COLUMNS = [
+    {"name": "day", "label": "Day", "field": "day", "align": "left"},
+    {"name": "low", "label": "Coldest likely (p10)", "field": "low"},
+    {"name": "median", "label": "Median", "field": "median"},
+    {"name": "high", "label": "Warmest likely (p90)", "field": "high"},
+]
+AQI_COLUMNS = [
+    {"name": "time", "label": "Time", "field": "time", "align": "left"},
+    {"name": "aqi", "label": "European AQI", "field": "aqi"},
+    {"name": "band", "label": "Band", "field": "band"},
+]
 
 
 def _day(iso: str) -> str:
@@ -126,24 +176,34 @@ def _hour(iso: str) -> str:
 
 def _frame(theme: str) -> dict:
     p = PALETTE[theme]
-    return {"backgroundColor": p["surface"], "animationDuration": 300,
-            "textStyle": {"color": p["ink2"], "fontFamily": FONT},
-            "grid": {"left": 48, "right": 16, "top": 36, "bottom": 32, "containLabel": True}}
+    return {
+        "backgroundColor": p["surface"],
+        "animationDuration": 300,
+        "textStyle": {"color": p["ink2"], "fontFamily": FONT},
+        "grid": {"left": 48, "right": 16, "top": 36, "bottom": 32, "containLabel": True},
+    }
 
 
 def _axis(theme: str, **extra) -> dict:
     p = PALETTE[theme]
-    return {"axisLine": {"lineStyle": {"color": p["axis"]}},
-            "axisLabel": {"color": p["muted"]},
-            "splitLine": {"lineStyle": {"color": p["grid"]}},
-            "nameTextStyle": {"color": p["muted"]}, **extra}
+    return {
+        "axisLine": {"lineStyle": {"color": p["axis"]}},
+        "axisLabel": {"color": p["muted"]},
+        "splitLine": {"lineStyle": {"color": p["grid"]}},
+        "nameTextStyle": {"color": p["muted"]},
+        **extra,
+    }
 
 
 def _day_ticks(theme: str) -> dict:
     """Hourly axes: one tick a day showing only "Mon 05", and ECharts drops any
     label that would overlap (a phone fits about four)."""
-    return {"color": PALETTE[theme]["muted"], "interval": 23, "hideOverlap": True,
-            ":formatter": "v => v.slice(0, 6)"}
+    return {
+        "color": PALETTE[theme]["muted"],
+        "interval": 23,
+        "hideOverlap": True,
+        ":formatter": "v => v.slice(0, 6)",
+    }
 
 
 def _tooltip(labels: list[str]) -> dict:
@@ -162,34 +222,63 @@ def daily_range_option(daily: dict, units: str, theme: str) -> dict:
     p, u = PALETTE[theme], UNIT_LABELS[units]["temp"]
     lows, highs = daily["temperature_2m_min"], daily["temperature_2m_max"]
     days = [_day(d) for d in daily["time"]]
-    labels = [f"{d}: {_fmt(lo, u)} to {_fmt(hi, u)}"
-              for d, lo, hi in zip(days, lows, highs, strict=False)]
+    labels = [
+        f"{d}: {_fmt(lo, u)} to {_fmt(hi, u)}" for d, lo, hi in zip(days, lows, highs, strict=False)
+    ]
     colour = p["inner"]
-    return {**_frame(theme), "tooltip": _tooltip(labels),
-            "xAxis": _axis(theme, type="category", data=days),
-            "yAxis": _axis(theme, type="value", scale=True, name=f"Temperature ({u})"),
-            "series": [{"type": "candlestick", "name": "Temperature range", "barWidth": "40%",
-                        "data": [[lo, hi, lo, hi] for lo, hi in zip(lows, highs, strict=False)],
-                        "itemStyle": {"color": colour, "color0": colour, "borderColor": colour,
-                                      "borderColor0": colour, "borderRadius": 4}}]}
+    return {
+        **_frame(theme),
+        "tooltip": _tooltip(labels),
+        "xAxis": _axis(theme, type="category", data=days),
+        "yAxis": _axis(theme, type="value", scale=True, name=f"Temperature ({u})"),
+        "series": [
+            {
+                "type": "candlestick",
+                "name": "Temperature range",
+                "barWidth": "40%",
+                "data": [[lo, hi, lo, hi] for lo, hi in zip(lows, highs, strict=False)],
+                "itemStyle": {
+                    "color": colour,
+                    "color0": colour,
+                    "borderColor": colour,
+                    "borderColor0": colour,
+                    "borderRadius": 4,
+                },
+            }
+        ],
+    }
 
 
 def precip_option(daily: dict, theme: str) -> dict:
     p = PALETTE[theme]
     probs = daily["precipitation_probability_max"]
     days = [_day(d) for d in daily["time"]]
-    labels = [f"{d}: {'–' if v is None else f'{v} %'} chance of rain"
-              for d, v in zip(days, probs, strict=False)]
-    return {**_frame(theme), "tooltip": _tooltip(labels),
-            "xAxis": _axis(theme, type="category", data=days),
-            "yAxis": _axis(theme, type="value", min=0, max=100, name="Chance of rain (%)"),
-            "series": [{"type": "bar", "name": "Chance of rain", "data": probs, "barWidth": "40%",
-                        "itemStyle": {"color": p["inner"], "borderRadius": [4, 4, 0, 0]}}]}
+    labels = [
+        f"{d}: {'–' if v is None else f'{v} %'} chance of rain"
+        for d, v in zip(days, probs, strict=False)
+    ]
+    return {
+        **_frame(theme),
+        "tooltip": _tooltip(labels),
+        "xAxis": _axis(theme, type="category", data=days),
+        "yAxis": _axis(theme, type="value", min=0, max=100, name="Chance of rain (%)"),
+        "series": [
+            {
+                "type": "bar",
+                "name": "Chance of rain",
+                "data": probs,
+                "barWidth": "40%",
+                "itemStyle": {"color": p["inner"], "borderRadius": [4, 4, 0, 0]},
+            }
+        ],
+    }
 
 
 def _diff(lower: list, upper: list) -> list:
-    return [None if a is None or b is None else round(b - a, 2)
-            for a, b in zip(lower, upper, strict=False)]
+    return [
+        None if a is None or b is None else round(b - a, 2)
+        for a, b in zip(lower, upper, strict=False)
+    ]
 
 
 def fan_option(pct: dict, units: str, theme: str) -> dict:
@@ -198,59 +287,108 @@ def fan_option(pct: dict, units: str, theme: str) -> dict:
     it; stackStrategy "all" keeps negative bases stacking."""
     p, u = PALETTE[theme], UNIT_LABELS[units]["temp"]
     hours = [_hour(t) for t in pct["time"]]
-    labels = [f"{h}: median {_fmt(m, u)}, middle half {_fmt(a, u)} to {_fmt(b, u)}, "
-              f"likely range {_fmt(lo, u)} to {_fmt(hi, u)}"
-              for h, m, a, b, lo, hi in zip(hours, pct["p50"], pct["p25"], pct["p75"],
-                                            pct["p10"], pct["p90"], strict=False)]
+    labels = [
+        f"{h}: median {_fmt(m, u)}, middle half {_fmt(a, u)} to {_fmt(b, u)}, "
+        f"likely range {_fmt(lo, u)} to {_fmt(hi, u)}"
+        for h, m, a, b, lo, hi in zip(
+            hours, pct["p50"], pct["p25"], pct["p75"], pct["p10"], pct["p90"], strict=False
+        )
+    ]
 
     def base(name: str, data: list, stack: str) -> dict:
-        return {"name": name, "type": "line", "data": data, "stack": stack,
-                "stackStrategy": "all", "symbol": "none", "lineStyle": {"opacity": 0}}
+        return {
+            "name": name,
+            "type": "line",
+            "data": data,
+            "stack": stack,
+            "stackStrategy": "all",
+            "symbol": "none",
+            "lineStyle": {"opacity": 0},
+        }
 
     def band(name: str, data: list, stack: str, colour: str) -> dict:
-        return {**base(name, data, stack), "areaStyle": {"color": colour, "opacity": 1},
-                "itemStyle": {"color": colour}}  # the legend swatch, not ECharts' default
+        return {
+            **base(name, data, stack),
+            "areaStyle": {"color": colour, "opacity": 1},
+            "itemStyle": {"color": colour},
+        }  # the legend swatch, not ECharts' default
 
     frame = _frame(theme)
     frame["grid"] = {**frame["grid"], "top": 56}  # the legend gets its own row
-    return {**frame, "tooltip": _tooltip(labels),
-            "legend": {"data": ["10–90 %", "25–75 %", "Median"], "top": 0,
-                       "textStyle": {"color": p["ink2"]}},
-            "xAxis": _axis(theme, type="category", data=hours, boundaryGap=False,
-                           axisLabel=_day_ticks(theme)),
-            "yAxis": _axis(theme, type="value", scale=True, name=f"Temperature ({u})"),
-            "series": [
-                base("p10", pct["p10"], "outer"),
-                band("10–90 %", _diff(pct["p10"], pct["p90"]), "outer", p["outer"]),
-                base("p25", pct["p25"], "inner"),
-                band("25–75 %", _diff(pct["p25"], pct["p75"]), "inner", p["inner"]),
-                {"name": "Median", "type": "line", "data": pct["p50"], "symbol": "none",
-                 "lineStyle": {"color": p["line"], "width": 2}, "itemStyle": {"color": p["line"]}},
-            ]}
+    return {
+        **frame,
+        "tooltip": _tooltip(labels),
+        "legend": {
+            "data": ["10–90 %", "25–75 %", "Median"],
+            "top": 0,
+            "textStyle": {"color": p["ink2"]},
+        },
+        "xAxis": _axis(
+            theme, type="category", data=hours, boundaryGap=False, axisLabel=_day_ticks(theme)
+        ),
+        "yAxis": _axis(theme, type="value", scale=True, name=f"Temperature ({u})"),
+        "series": [
+            base("p10", pct["p10"], "outer"),
+            band("10–90 %", _diff(pct["p10"], pct["p90"]), "outer", p["outer"]),
+            base("p25", pct["p25"], "inner"),
+            band("25–75 %", _diff(pct["p25"], pct["p75"]), "inner", p["inner"]),
+            {
+                "name": "Median",
+                "type": "line",
+                "data": pct["p50"],
+                "symbol": "none",
+                "lineStyle": {"color": p["line"], "width": 2},
+                "itemStyle": {"color": p["line"]},
+            },
+        ],
+    }
 
 
 def aqi_option(hourly: dict, theme: str) -> dict:
     p = PALETTE[theme]
     values = hourly["european_aqi"]
     hours = [_hour(t) for t in hourly["time"]]
-    labels = [f"{h}: " + ("no reading" if v is None else f"AQI {round(v)}, {aqi_band(v)[0]}")
-              for h, v in zip(hours, values, strict=False)]
-    return {**_frame(theme), "tooltip": _tooltip(labels),
-            "xAxis": _axis(theme, type="category", data=hours, boundaryGap=False,
-                           axisLabel=_day_ticks(theme)),
-            "yAxis": _axis(theme, type="value", min=0, name="European AQI"),
-            "series": [{"type": "line", "name": "European AQI", "data": values, "symbol": "none",
-                        "lineStyle": {"color": p["line"], "width": 2},
-                        "itemStyle": {"color": p["line"]}}]}
+    labels = [
+        f"{h}: " + ("no reading" if v is None else f"AQI {round(v)}, {aqi_band(v)[0]}")
+        for h, v in zip(hours, values, strict=False)
+    ]
+    return {
+        **_frame(theme),
+        "tooltip": _tooltip(labels),
+        "xAxis": _axis(
+            theme, type="category", data=hours, boundaryGap=False, axisLabel=_day_ticks(theme)
+        ),
+        "yAxis": _axis(theme, type="value", min=0, name="European AQI"),
+        "series": [
+            {
+                "type": "line",
+                "name": "European AQI",
+                "data": values,
+                "symbol": "none",
+                "lineStyle": {"color": p["line"], "width": 2},
+                "itemStyle": {"color": p["line"]},
+            }
+        ],
+    }
 
 
 def daily_rows(daily: dict, units: str) -> list[dict]:
     u = UNIT_LABELS[units]["temp"]
-    return [{"day": _day(d), "low": _fmt(lo, u), "high": _fmt(hi, u),
-             "rain": "–" if r is None else f"{r} %"}
-            for d, lo, hi, r in zip(daily["time"], daily["temperature_2m_min"],
-                                    daily["temperature_2m_max"],
-                                    daily["precipitation_probability_max"], strict=False)]
+    return [
+        {
+            "day": _day(d),
+            "low": _fmt(lo, u),
+            "high": _fmt(hi, u),
+            "rain": "–" if r is None else f"{r} %",
+        }
+        for d, lo, hi, r in zip(
+            daily["time"],
+            daily["temperature_2m_min"],
+            daily["temperature_2m_max"],
+            daily["precipitation_probability_max"],
+            strict=False,
+        )
+    ]
 
 
 def fan_rows(pct: dict, units: str) -> list[dict]:
@@ -264,13 +402,24 @@ def fan_rows(pct: dict, units: str) -> list[dict]:
         d["lo"].append(lo)
         d["mid"].append(mid)
         d["hi"].append(hi)
-    return [{"day": _day(day), "low": _fmt(min(v["lo"]), u),
-             "median": _fmt(sum(v["mid"]) / len(v["mid"]), u), "high": _fmt(max(v["hi"]), u)}
-            for day, v in days.items()]
+    return [
+        {
+            "day": _day(day),
+            "low": _fmt(min(v["lo"]), u),
+            "median": _fmt(sum(v["mid"]) / len(v["mid"]), u),
+            "high": _fmt(max(v["hi"]), u),
+        }
+        for day, v in days.items()
+    ]
 
 
 def aqi_rows(hourly: dict) -> list[dict]:
     """Every third hour, so the table stays readable."""
-    return [{"time": _hour(t), "aqi": "–" if v is None else round(v),
-             "band": "–" if v is None else aqi_band(v)[0]}
-            for t, v in list(zip(hourly["time"], hourly["european_aqi"], strict=False))[::3]]
+    return [
+        {
+            "time": _hour(t),
+            "aqi": "–" if v is None else round(v),
+            "band": "–" if v is None else aqi_band(v)[0],
+        }
+        for t, v in list(zip(hourly["time"], hourly["european_aqi"], strict=False))[::3]
+    ]

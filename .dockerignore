@@ -1,0 +1,11 @@
+.git
+.github
+.venv
+.nicegui
+.pytest_cache
+.ruff_cache
+.superpowers
+.claude
+CLAUDE.md
+**/__pycache__
+tests

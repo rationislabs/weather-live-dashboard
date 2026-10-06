@@ -44,8 +44,9 @@ class _Entry:
 
 
 class Cache:
-    def __init__(self, ttl: float, stale_max: float, max_entries: int,
-                 clock: Callable[[], float] = time.time) -> None:
+    def __init__(
+        self, ttl: float, stale_max: float, max_entries: int, clock: Callable[[], float] = time.time
+    ) -> None:
         self.ttl, self.stale_max, self.max_entries, self.clock = ttl, stale_max, max_entries, clock
         self._entries: dict[tuple, _Entry] = {}  # insertion order = age order
         self._inflight: dict[tuple, asyncio.Task] = {}
@@ -98,8 +99,11 @@ TIMEOUT = 10.0
 
 UNIT_PARAMS: dict[str, dict[str, str]] = {
     "metric": {},
-    "imperial": {"temperature_unit": "fahrenheit", "wind_speed_unit": "mph",
-                 "precipitation_unit": "inch"},
+    "imperial": {
+        "temperature_unit": "fahrenheit",
+        "wind_speed_unit": "mph",
+        "precipitation_unit": "inch",
+    },
 }
 
 
@@ -118,10 +122,12 @@ class Place:
 
 def forecast_params(place: Place, units: str) -> dict[str, Any]:
     return {
-        "latitude": place.latitude, "longitude": place.longitude,
-        "timezone": "auto", "forecast_days": 7,
+        "latitude": place.latitude,
+        "longitude": place.longitude,
+        "timezone": "auto",
+        "forecast_days": 7,
         "current": "temperature_2m,apparent_temperature,relative_humidity_2m,"
-                   "wind_speed_10m,precipitation,weather_code",
+        "wind_speed_10m,precipitation,weather_code",
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
         **UNIT_PARAMS[units],
     }
@@ -130,16 +136,22 @@ def forecast_params(place: Place, units: str) -> dict[str, Any]:
 def ensemble_params(place: Place, units: str) -> dict[str, Any]:
     temp = {k: v for k, v in UNIT_PARAMS[units].items() if k == "temperature_unit"}
     return {
-        "latitude": place.latitude, "longitude": place.longitude,
-        "timezone": "auto", "forecast_days": 7,
-        "hourly": "temperature_2m", "models": "ecmwf_ifs025", **temp,
+        "latitude": place.latitude,
+        "longitude": place.longitude,
+        "timezone": "auto",
+        "forecast_days": 7,
+        "hourly": "temperature_2m",
+        "models": "ecmwf_ifs025",
+        **temp,
     }
 
 
 def air_params(place: Place) -> dict[str, Any]:
     return {
-        "latitude": place.latitude, "longitude": place.longitude,
-        "timezone": "auto", "forecast_days": 5,
+        "latitude": place.latitude,
+        "longitude": place.longitude,
+        "timezone": "auto",
+        "forecast_days": 5,
         "current": "european_aqi,pm2_5,birch_pollen,grass_pollen,ragweed_pollen",
         "hourly": "european_aqi",
     }
@@ -165,8 +177,12 @@ async def _get_json(http: httpx.AsyncClient, url: str, params: dict[str, Any]) -
 
 
 class OpenMeteo:
-    def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None,
-                 clock: Callable[[], float] = time.time) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        http: httpx.AsyncClient | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         self.http = http or httpx.AsyncClient()
         self.cache = Cache(settings.cache_ttl, settings.stale_max, settings.cache_max, clock)
 
@@ -179,28 +195,40 @@ class OpenMeteo:
 
     async def forecast(self, place: Place, units: str) -> Result:
         params = forecast_params(place, units)
-        return await self.cache.get(("forecast", *self._at(place), units),
-                                    lambda: _get_json(self.http, FORECAST, params))
+        return await self.cache.get(
+            ("forecast", *self._at(place), units), lambda: _get_json(self.http, FORECAST, params)
+        )
 
     async def ensemble(self, place: Place, units: str) -> Result:
         params = ensemble_params(place, units)
-        return await self.cache.get(("ensemble", *self._at(place), units),
-                                    lambda: _get_json(self.http, ENSEMBLE, params))
+        return await self.cache.get(
+            ("ensemble", *self._at(place), units), lambda: _get_json(self.http, ENSEMBLE, params)
+        )
 
     async def air(self, place: Place) -> Result:
         params = air_params(place)
-        return await self.cache.get(("air", *self._at(place)),
-                                    lambda: _get_json(self.http, AIR, params))
+        return await self.cache.get(
+            ("air", *self._at(place)), lambda: _get_json(self.http, AIR, params)
+        )
 
     async def search(self, text: str, count: int = 5) -> list[Place]:
         name = text.strip()
         if not name:
             return []
-        result = await self.cache.get(("geocode", name.lower(), count),
-                                      lambda: _get_json(self.http, GEOCODE, geocode_params(name, count)))
-        return [Place(r["name"], r.get("admin1", ""), r.get("country_code", ""),
-                      r["latitude"], r["longitude"])
-                for r in result.data.get("results", [])]
+        result = await self.cache.get(
+            ("geocode", name.lower(), count),
+            lambda: _get_json(self.http, GEOCODE, geocode_params(name, count)),
+        )
+        return [
+            Place(
+                r["name"],
+                r.get("admin1", ""),
+                r.get("country_code", ""),
+                r["latitude"],
+                r["longitude"],
+            )
+            for r in result.data.get("results", [])
+        ]
 
 
 def match_place(places: list[Place], text: str) -> Place | None:

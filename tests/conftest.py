@@ -1,7 +1,5 @@
 """Shared test setup. NiceGUI's `user` fixture runs main.py in-process."""
 
-pytest_plugins = ["nicegui.testing.user_plugin"]
-
 import json
 from pathlib import Path
 
@@ -11,6 +9,7 @@ import respx
 
 from weather_live import openmeteo as om
 
+pytest_plugins = ["nicegui.testing.user_plugin"]
 FIXTURES = Path(__file__).parent / "fixtures"
 
 

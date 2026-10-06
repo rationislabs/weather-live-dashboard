@@ -4,8 +4,13 @@ from nicegui.testing import User
 
 async def test_renders_every_panel(user: User, api_routes) -> None:
     await user.open("/?city=Vienna")
-    for text in ("Vienna", "Next 7 days", "How sure is the forecast?", "Air quality",
-                 "Weather data by Open-Meteo.com"):
+    for text in (
+        "Vienna",
+        "Next 7 days",
+        "How sure is the forecast?",
+        "Air quality",
+        "Weather data by Open-Meteo.com",
+    ):
         await user.should_see(text)
 
 
@@ -19,8 +24,13 @@ async def test_one_failing_endpoint_leaves_the_rest(user: User, api_routes) -> N
 
 async def test_retry_reloads_the_panel(user: User, api_routes, fx) -> None:
     # two failures: the page warms the cache, then the panel asks again
-    api_routes["air"].mock(side_effect=[httpx.Response(500), httpx.Response(500),
-                                        httpx.Response(200, json=fx("air_vienna"))])
+    api_routes["air"].mock(
+        side_effect=[
+            httpx.Response(500),
+            httpx.Response(500),
+            httpx.Response(200, json=fx("air_vienna")),
+        ]
+    )
     await user.open("/?city=Vienna")
     await user.should_see("Couldn't load air quality.")
     user.find("Retry").click()
@@ -45,6 +55,7 @@ async def test_geocoding_down_shows_retry(user: User, api_routes) -> None:
 
 async def test_stale_panel_says_so(user: User, api_routes) -> None:
     from weather_live import page
+
     await user.open("/?city=Vienna")
     await user.should_see("Air quality")
     for entry in page.api.cache._entries.values():  # age every cached response

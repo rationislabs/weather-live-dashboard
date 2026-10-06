@@ -6,8 +6,12 @@ def test_defaults(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     s = config.load()
     assert s == config.Settings(
-        host="127.0.0.1", port=8080, default_city="Vienna",
-        cache_ttl=900, cache_max=500, stale_max=21600,
+        host="127.0.0.1",
+        port=8080,
+        default_city="Vienna",
+        cache_ttl=900,
+        cache_max=500,
+        stale_max=21600,
     )
 
 

@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    image: weather-live-dashboard:local
+    ports:
+      - "127.0.0.1:8080:8080"   # loopback only
+    environment:
+      DEFAULT_CITY: ${DEFAULT_CITY:-Vienna}
+    restart: unless-stopped

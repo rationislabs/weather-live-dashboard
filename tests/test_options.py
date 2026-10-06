@@ -28,9 +28,14 @@ def test_fan_has_two_bands_and_a_median(fx):
 
 
 def test_fan_stacks_across_zero():
-    pct = {"time": ["2026-01-10T00:00", "2026-01-10T01:00"],
-           "p10": [-31.0, -30.0], "p25": [-29.0, -28.5], "p50": [-27.0, -26.0],
-           "p75": [-25.0, -24.0], "p90": [-22.0, 1.0]}
+    pct = {
+        "time": ["2026-01-10T00:00", "2026-01-10T01:00"],
+        "p10": [-31.0, -30.0],
+        "p25": [-29.0, -28.5],
+        "p50": [-27.0, -26.0],
+        "p75": [-25.0, -24.0],
+        "p90": [-22.0, 1.0],
+    }
     opt = charts.fan_option(pct, "metric", "light")
     by = {s["name"]: s for s in opt["series"]}
     assert by["10–90 %"]["data"] == [9.0, 31.0]
@@ -66,8 +71,10 @@ def test_fan_legend_swatches_match_the_bands(fx):
 
 def test_hourly_axes_label_days_only_and_hide_overlaps(fx):
     pct = charts.ensemble_percentiles(fx("ensemble_vienna")["hourly"])
-    for opt in (charts.fan_option(pct, "metric", "light"),
-                charts.aqi_option(fx("air_vienna")["hourly"], "light")):
+    for opt in (
+        charts.fan_option(pct, "metric", "light"),
+        charts.aqi_option(fx("air_vienna")["hourly"], "light"),
+    ):
         label = opt["xAxis"]["axisLabel"]
         assert label["hideOverlap"] is True and label[":formatter"] == "v => v.slice(0, 6)"
     fan = charts.fan_option(pct, "metric", "light")

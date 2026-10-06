@@ -55,8 +55,7 @@ def stamp(result: om.Result, offset_seconds: int) -> str:
     return f"From {at:%H:%M} (couldn't refresh)" if result.stale else f"Updated {at:%H:%M}"
 
 
-def panel(what: str, load: Callable[[], Awaitable[om.Result]],
-          render: Callable[[om.Result], None]):
+def panel(what: str, load: Callable[[], Awaitable[om.Result]], render: Callable[[om.Result], None]):
     """A section that fails on its own: an error and Retry, never a blank page."""
 
     @ui.refreshable
@@ -71,19 +70,24 @@ def panel(what: str, load: Callable[[], Awaitable[om.Result]],
         render(result)
         if result.stale:  # served from the cache after a failed refresh
             ui.label(stamp(result, result.data.get("utc_offset_seconds", 0))).classes(
-                "text-sm opacity-70")
+                "text-sm opacity-70"
+            )
 
     return body
 
 
 def chart_or_table(options: list[dict], columns: list[dict], rows: list[dict]) -> None:
     table_on = ui.switch("Show as table")
-    with ui.column().classes("w-full").bind_visibility_from(table_on, "value",
-                                                             backward=lambda v: not v):
+    with (
+        ui.column()
+        .classes("w-full")
+        .bind_visibility_from(table_on, "value", backward=lambda v: not v)
+    ):
         for option in options:
             ui.echart(option).classes("w-full h-64")
     ui.table(columns=columns, rows=rows, row_key=columns[0]["field"]).classes(
-        "w-full").bind_visibility_from(table_on, "value")
+        "w-full"
+    ).bind_visibility_from(table_on, "value")
 
 
 def header(place: om.Place | None, units: str, theme: str) -> None:
@@ -109,14 +113,21 @@ def header(place: om.Place | None, units: str, theme: str) -> None:
                 if not places:
                     ui.label(f"No place called '{text}'").classes("text-sm")
                 for p in places:
-                    ui.button(p.label, on_click=lambda p=p: ui.navigate.to(url(p.label, units, theme))
-                              ).props("flat dense no-caps")
+                    ui.button(
+                        p.label, on_click=lambda p=p: ui.navigate.to(url(p.label, units, theme))
+                    ).props("flat dense no-caps")
 
         box.on("update:model-value", suggest, throttle=0.4)
-        ui.toggle({"metric": "°C", "imperial": "°F"}, value=units,
-                  on_change=lambda e: ui.navigate.to(url(here, e.value, theme)))
-        ui.switch("Dark", value=theme == "dark",
-                  on_change=lambda e: ui.navigate.to(url(here, units, "dark" if e.value else "light")))
+        ui.toggle(
+            {"metric": "°C", "imperial": "°F"},
+            value=units,
+            on_change=lambda e: ui.navigate.to(url(here, e.value, theme)),
+        )
+        ui.switch(
+            "Dark",
+            value=theme == "dark",
+            on_change=lambda e: ui.navigate.to(url(here, units, "dark" if e.value else "light")),
+        )
 
 
 def render_now(r: om.Result, units: str) -> None:
@@ -128,33 +139,41 @@ def render_now(r: om.Result, units: str) -> None:
             ui.label(f"{round(c['temperature_2m'])}{u['temp']}").classes("text-6xl font-semibold")
             ui.label(text).classes("text-xl")
         with ui.row().classes("gap-6"):
-            for label, value in (("Feels like", f"{round(c['apparent_temperature'])}{u['temp']}"),
-                                 ("Wind", f"{round(c['wind_speed_10m'])} {u['wind']}"),
-                                 ("Humidity", f"{c['relative_humidity_2m']} %"),
-                                 ("Precipitation", f"{c['precipitation']} {u['precip']}")):
+            for label, value in (
+                ("Feels like", f"{round(c['apparent_temperature'])}{u['temp']}"),
+                ("Wind", f"{round(c['wind_speed_10m'])} {u['wind']}"),
+                ("Humidity", f"{c['relative_humidity_2m']} %"),
+                ("Precipitation", f"{c['precipitation']} {u['precip']}"),
+            ):
                 with ui.column().classes("gap-0"):
                     ui.label(label).classes("text-sm opacity-70")
                     ui.label(value).classes("text-lg")
-        ui.label(f"{stamp(r, r.data.get('utc_offset_seconds', 0))} · times in "
-                 f"{r.data.get('timezone', 'local time')}").classes("text-sm opacity-70")
+        ui.label(
+            f"{stamp(r, r.data.get('utc_offset_seconds', 0))} · times in "
+            f"{r.data.get('timezone', 'local time')}"
+        ).classes("text-sm opacity-70")
 
 
 def render_week(r: om.Result, units: str, theme: str) -> None:
     daily = r.data["daily"]
     ui.label("Next 7 days").classes("text-xl font-semibold")
-    chart_or_table([charts.daily_range_option(daily, units, theme),
-                    charts.precip_option(daily, theme)],
-                   charts.DAILY_COLUMNS, charts.daily_rows(daily, units))
+    chart_or_table(
+        [charts.daily_range_option(daily, units, theme), charts.precip_option(daily, theme)],
+        charts.DAILY_COLUMNS,
+        charts.daily_rows(daily, units),
+    )
 
 
 def render_fan(r: om.Result, units: str, theme: str) -> None:
     pct = charts.ensemble_percentiles(r.data["hourly"])
     ui.label("How sure is the forecast?").classes("text-xl font-semibold")
     ui.label("51 runs of the ECMWF ensemble. The wider the band, the less the runs agree.").classes(
-        "text-sm opacity-70")
+        "text-sm opacity-70"
+    )
     ui.label(charts.spread_caption(pct))
-    chart_or_table([charts.fan_option(pct, units, theme)], charts.FAN_COLUMNS,
-                   charts.fan_rows(pct, units))
+    chart_or_table(
+        [charts.fan_option(pct, units, theme)], charts.FAN_COLUMNS, charts.fan_rows(pct, units)
+    )
 
 
 def render_air(r: om.Result, theme: str) -> None:
@@ -170,9 +189,14 @@ def render_air(r: om.Result, theme: str) -> None:
             ui.icon(charts.STATUS_ICON[status]).style(f"color: {colour}").classes("text-3xl")
             ui.label(f"European AQI {round(aqi)} · {name}").classes("text-lg")
         ui.linear_progress(value=min(aqi, 100) / 100, show_value=False, color=colour)
-    pollen = [(label, cur.get(key)) for label, key in (("Birch pollen", "birch_pollen"),
-                                                       ("Grass pollen", "grass_pollen"),
-                                                       ("Ragweed pollen", "ragweed_pollen"))]
+    pollen = [
+        (label, cur.get(key))
+        for label, key in (
+            ("Birch pollen", "birch_pollen"),
+            ("Grass pollen", "grass_pollen"),
+            ("Ragweed pollen", "ragweed_pollen"),
+        )
+    ]
     with ui.row().classes("gap-6"):
         if cur.get("pm2_5") is not None:
             with ui.column().classes("gap-0"):
@@ -183,8 +207,11 @@ def render_air(r: om.Result, theme: str) -> None:
                 with ui.column().classes("gap-0"):
                     ui.label(label).classes("text-sm opacity-70")
                     ui.label(f"{value} grains/m³").classes("text-lg")
-    chart_or_table([charts.aqi_option(r.data["hourly"], theme)], charts.AQI_COLUMNS,
-                   charts.aqi_rows(r.data["hourly"]))
+    chart_or_table(
+        [charts.aqi_option(r.data["hourly"], theme)],
+        charts.AQI_COLUMNS,
+        charts.aqi_rows(r.data["hourly"]),
+    )
 
 
 def footer() -> None:
@@ -219,25 +246,38 @@ async def index(city: str = "", units: str = "metric", theme: str = "light") -> 
 
         # Warm the cache in parallel; each panel then reads its own result and
         # fails on its own.
-        await asyncio.gather(api.forecast(place, units), api.ensemble(place, units),
-                             api.air(place), return_exceptions=True)
-        now = panel("current conditions", lambda: api.forecast(place, units),
-                    lambda r: render_now(r, units))
+        await asyncio.gather(
+            api.forecast(place, units),
+            api.ensemble(place, units),
+            api.air(place),
+            return_exceptions=True,
+        )
+        now = panel(
+            "current conditions", lambda: api.forecast(place, units), lambda r: render_now(r, units)
+        )
         await now()
         ui.timer(settings.cache_ttl, now.refresh)
-        await panel("the 7-day forecast", lambda: api.forecast(place, units),
-                    lambda r: render_week(r, units, theme))()
-        await panel("the forecast spread", lambda: api.ensemble(place, units),
-                    lambda r: render_fan(r, units, theme))()
+        await panel(
+            "the 7-day forecast",
+            lambda: api.forecast(place, units),
+            lambda r: render_week(r, units, theme),
+        )()
+        await panel(
+            "the forecast spread",
+            lambda: api.ensemble(place, units),
+            lambda r: render_fan(r, units, theme),
+        )()
         await panel("air quality", lambda: api.air(place), lambda r: render_air(r, theme))()
         footer()
 
     if not city:
+
         async def from_browser() -> None:
             """No ?city=: use the city the visitor's time zone names, if it is real."""
             try:
-                tz = await ui.run_javascript("Intl.DateTimeFormat().resolvedOptions().timeZone",
-                                             timeout=3)
+                tz = await ui.run_javascript(
+                    "Intl.DateTimeFormat().resolvedOptions().timeZone", timeout=3
+                )
             except Exception:  # noqa: BLE001 — no browser answer just keeps the default
                 return
             guess = om.city_from_timezone(tz or "")
