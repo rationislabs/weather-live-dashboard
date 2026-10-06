@@ -1,0 +1,37 @@
+[project]
+name = "weather-live-dashboard"
+version = "0.1.0"
+description = "Live weather for one city: forecast, ensemble spread and air quality (NiceGUI + ECharts)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "nicegui>=3.17,<4",
+  "httpx>=0.28,<1",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+  "pytest>=9.1",
+  "pytest-asyncio>=1.4",
+  "respx>=0.23",
+  "ruff>=0.12",
+  "invoke>=2.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib -ra -m 'not e2e'"
+pythonpath = ["."]  # weather_live is not installed (package = false)
+asyncio_mode = "auto"
+main_file = "main.py"
+markers = ["e2e: calls the real Open-Meteo API (uv run inv e2e)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # ruff format owns line length; long string literals are allowed

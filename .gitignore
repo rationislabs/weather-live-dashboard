@@ -231,3 +231,6 @@ graphify-out/
 .caveman*
 .headroom/
 .worktrees/
+
+# NiceGUI runtime storage
+.nicegui/
