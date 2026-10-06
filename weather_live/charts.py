@@ -139,6 +139,13 @@ def _axis(theme: str, **extra) -> dict:
             "nameTextStyle": {"color": p["muted"]}, **extra}
 
 
+def _day_ticks(theme: str) -> dict:
+    """Hourly axes: one tick a day showing only "Mon 05", and ECharts drops any
+    label that would overlap (a phone fits about four)."""
+    return {"color": PALETTE[theme]["muted"], "interval": 23, "hideOverlap": True,
+            ":formatter": "v => v.slice(0, 6)"}
+
+
 def _tooltip(labels: list[str]) -> dict:
     """Axis tooltip whose text is computed here, so no chart logic lives in JS.
     The ':' prefix makes NiceGUI evaluate the value as JavaScript."""
@@ -201,13 +208,16 @@ def fan_option(pct: dict, units: str, theme: str) -> dict:
                 "stackStrategy": "all", "symbol": "none", "lineStyle": {"opacity": 0}}
 
     def band(name: str, data: list, stack: str, colour: str) -> dict:
-        return {**base(name, data, stack), "areaStyle": {"color": colour, "opacity": 1}}
+        return {**base(name, data, stack), "areaStyle": {"color": colour, "opacity": 1},
+                "itemStyle": {"color": colour}}  # the legend swatch, not ECharts' default
 
-    return {**_frame(theme), "tooltip": _tooltip(labels),
+    frame = _frame(theme)
+    frame["grid"] = {**frame["grid"], "top": 56}  # the legend gets its own row
+    return {**frame, "tooltip": _tooltip(labels),
             "legend": {"data": ["10–90 %", "25–75 %", "Median"], "top": 0,
                        "textStyle": {"color": p["ink2"]}},
             "xAxis": _axis(theme, type="category", data=hours, boundaryGap=False,
-                           axisLabel={"color": p["muted"], "interval": 23}),
+                           axisLabel=_day_ticks(theme)),
             "yAxis": _axis(theme, type="value", scale=True, name=f"Temperature ({u})"),
             "series": [
                 base("p10", pct["p10"], "outer"),
@@ -227,7 +237,7 @@ def aqi_option(hourly: dict, theme: str) -> dict:
               for h, v in zip(hours, values, strict=False)]
     return {**_frame(theme), "tooltip": _tooltip(labels),
             "xAxis": _axis(theme, type="category", data=hours, boundaryGap=False,
-                           axisLabel={"color": p["muted"], "interval": 23}),
+                           axisLabel=_day_ticks(theme)),
             "yAxis": _axis(theme, type="value", min=0, name="European AQI"),
             "series": [{"type": "line", "name": "European AQI", "data": values, "symbol": "none",
                         "lineStyle": {"color": p["line"], "width": 2},

@@ -55,3 +55,20 @@ def test_table_rows_match_their_columns(fx):
     pct = charts.ensemble_percentiles(fx("ensemble_vienna")["hourly"])
     fan = charts.fan_rows(pct, "metric")
     assert len(fan) == 7 and set(fan[0]) == {c["field"] for c in charts.FAN_COLUMNS}
+
+
+def test_fan_legend_swatches_match_the_bands(fx):
+    pct = charts.ensemble_percentiles(fx("ensemble_vienna")["hourly"])
+    by = {s["name"]: s for s in charts.fan_option(pct, "metric", "light")["series"]}
+    assert by["10–90 %"]["itemStyle"]["color"] == charts.PALETTE["light"]["outer"]
+    assert by["25–75 %"]["itemStyle"]["color"] == charts.PALETTE["light"]["inner"]
+
+
+def test_hourly_axes_label_days_only_and_hide_overlaps(fx):
+    pct = charts.ensemble_percentiles(fx("ensemble_vienna")["hourly"])
+    for opt in (charts.fan_option(pct, "metric", "light"),
+                charts.aqi_option(fx("air_vienna")["hourly"], "light")):
+        label = opt["xAxis"]["axisLabel"]
+        assert label["hideOverlap"] is True and label[":formatter"] == "v => v.slice(0, 6)"
+    fan = charts.fan_option(pct, "metric", "light")
+    assert fan["grid"]["top"] >= 56, "legend needs its own row above the axis title"
