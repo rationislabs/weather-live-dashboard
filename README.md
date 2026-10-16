@@ -19,6 +19,8 @@ docker compose up -d --build
 docker compose down
 ```
 
+If port 8080 is taken, pick another: `HOST_PORT=8085 docker compose up -d --build`.
+
 For development (needs [uv](https://docs.astral.sh/uv/)):
 
 ```bash
