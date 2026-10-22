@@ -196,12 +196,15 @@ def _axis(theme: str, **extra) -> dict:
     }
 
 
-def _day_ticks(theme: str) -> dict:
+def _day_ticks(theme: str, hours: list[str]) -> dict:
     """Hourly axes: one tick a day showing only "Mon 05", and ECharts drops any
     label that would overlap (a phone fits about four)."""
+    # The first hour of each local day, not every 24th hour (DST days have 23 or 25) and
+    # not 00:00 (a zone that springs forward at midnight has none that day).
+    firsts = [i for i, h in enumerate(hours) if i == 0 or h[:6] != hours[i - 1][:6]]
     return {
         "color": PALETTE[theme]["muted"],
-        "interval": 23,
+        ":interval": f"(i) => {json.dumps(firsts)}.includes(i)",
         "hideOverlap": True,
         ":formatter": "v => v.slice(0, 6)",
     }
@@ -326,7 +329,11 @@ def fan_option(pct: dict, units: str, theme: str) -> dict:
             "textStyle": {"color": p["ink2"]},
         },
         "xAxis": _axis(
-            theme, type="category", data=hours, boundaryGap=False, axisLabel=_day_ticks(theme)
+            theme,
+            type="category",
+            data=hours,
+            boundaryGap=False,
+            axisLabel=_day_ticks(theme, hours),
         ),
         "yAxis": _axis(theme, type="value", scale=True, name=f"Temperature ({u})"),
         "series": [
@@ -358,7 +365,11 @@ def aqi_option(hourly: dict, theme: str) -> dict:
         **_frame(theme),
         "tooltip": _tooltip(labels),
         "xAxis": _axis(
-            theme, type="category", data=hours, boundaryGap=False, axisLabel=_day_ticks(theme)
+            theme,
+            type="category",
+            data=hours,
+            boundaryGap=False,
+            axisLabel=_day_ticks(theme, hours),
         ),
         "yAxis": _axis(theme, type="value", min=0, name="European AQI"),
         "series": [

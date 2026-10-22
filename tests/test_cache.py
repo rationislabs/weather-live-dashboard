@@ -133,3 +133,79 @@ async def test_a_cancelled_waiter_does_not_break_the_others():
     gate.set()
     assert (await stayer).data == {"v": 1}
     assert len(cache) == 1, "the result was not cached"
+
+
+async def test_a_hit_keeps_an_entry_from_being_evicted():
+    # The default city is asked for all the time: churn must push out the rarely used.
+    _, clock = clock_at()
+    cache = om.Cache(900, 21600, 2, clock)
+    _, fetch = counting()
+    await cache.get(("forecast", "vienna"), fetch)
+    await cache.get(("forecast", "x"), fetch)
+    await cache.get(("forecast", "vienna"), fetch)  # used again
+    await cache.get(("forecast", "y"), fetch)
+    calls, fetch = counting()
+    await cache.get(("forecast", "vienna"), fetch)
+    assert calls["n"] == 0, "vienna was evicted although it was just used"
+
+
+async def test_new_fetches_are_limited_per_minute_for_everyone():
+    now, clock = clock_at()
+    cache = om.Cache(900, 21600, 100, clock, limit_clock=clock, fetches_per_minute=3)
+    for k in range(3):
+        _, fetch = counting()
+        await cache.get(("geocode", k), fetch)
+    calls, fetch = counting()
+    with pytest.raises(om.UpstreamError):
+        await cache.get(("geocode", "one too many"), fetch)
+    assert calls["n"] == 0
+    now[0] += 61
+    await cache.get(("geocode", "one too many"), fetch)
+    assert calls["n"] == 1
+
+
+async def test_new_fetches_are_also_limited_per_hour():
+    # 120 a minute, sustained, would still use up Open-Meteo's hourly and daily quota.
+    now, clock = clock_at()
+    cache = om.Cache(
+        900, 21600, 100, clock, limit_clock=clock, fetches_per_minute=3, fetches_per_hour=4
+    )
+    for k in range(3):
+        await cache.get(("geocode", k), counting()[1])
+    now[0] += 61
+    await cache.get(("geocode", 3), counting()[1])
+    with pytest.raises(om.Busy):
+        await cache.get(("geocode", 4), counting()[1])
+    now[0] += 3600
+    await cache.get(("geocode", 4), counting()[1])
+
+
+async def test_over_the_limit_a_stale_copy_is_still_served():
+    now, clock = clock_at()
+    cache = om.Cache(900, 21600, 100, clock, limit_clock=clock, fetches_per_minute=1)
+    _, fetch = counting()
+    await cache.get(("forecast", "vienna"), fetch)
+    now[0] += 1000  # expired, still within stale_max
+    _, other = counting()
+    await cache.get(("forecast", "other"), other)
+    result = await cache.get(("forecast", "vienna"), fetch)
+    assert result.stale
+
+
+def test_the_limiter_uses_a_clock_that_never_steps_back():
+    # Entries keep wall-clock times (the page shows them); a wall clock stepped back by NTP
+    # would keep old lookups in the limiter's window for that long.
+    import inspect
+    import time
+
+    assert inspect.signature(om.Cache).parameters["limit_clock"].default is time.monotonic
+
+
+async def test_a_forgotten_entry_is_fetched_again():
+    now, clock = clock_at()
+    cache = om.Cache(900, 21600, 10, clock)
+    calls, fetch = counting()
+    await cache.get(("geocode", "x"), fetch)
+    cache.forget(("geocode", "x"))
+    await cache.get(("geocode", "x"), fetch)
+    assert calls["n"] == 2

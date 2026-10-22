@@ -75,3 +75,51 @@ def test_city_from_timezone():
     assert om.city_from_timezone("Europe/Vienna") == "Vienna"
     for none in ("UTC", "Etc/GMT+2", ""):
         assert om.city_from_timezone(none) is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"results": [{"name": "X"}]},
+        {"results": "nope"},
+        {"results": [None]},
+        {"results": [{"name": None, "latitude": 1, "longitude": 2}]},
+        {"results": [{"name": "X", "latitude": "north", "longitude": 2}]},
+    ],
+)
+async def test_a_malformed_geocoding_answer_is_an_upstream_error(api_routes, body):
+    # A KeyError here escaped the page's error handling: a blank page, no message.
+    api_routes["geocode"].mock(return_value=httpx.Response(200, json=body))
+    api = client()
+    with pytest.raises(om.UpstreamError):
+        await api.search("Graz")
+    await api.aclose()
+
+
+async def test_null_regions_and_string_coordinates_become_plain_values(api_routes):
+    # admin1 null crashed match_place; a string latitude crashed the cache key.
+    body = {"results": [{"name": "X", "admin1": None, "latitude": "48.2", "longitude": 2}]}
+    api_routes["geocode"].mock(return_value=httpx.Response(200, json=body))
+    api = client()
+    places = await api.search("X")
+    assert places[0].admin1 == "" and places[0].latitude == 48.2
+    assert om.match_place(places, "X, AT") is None
+    await api.aclose()
+
+
+async def test_a_malformed_answer_is_not_kept_for_15_minutes(api_routes, fx):
+    api_routes["geocode"].mock(return_value=httpx.Response(200, json={"results": "nope"}))
+    api = client()
+    with pytest.raises(om.UpstreamError):
+        await api.search("Graz")
+    api_routes["geocode"].mock(return_value=httpx.Response(200, json=fx("geocode_graz")))
+    assert (await api.search("Graz"))[0].name == "Graz"
+    await api.aclose()
+
+
+async def test_search_cuts_a_huge_name_short(api_routes):
+    # Every caller (the URL, the search box, the browser's time zone) goes through search.
+    api = client()
+    await api.search("x" * 5000)
+    assert len(api_routes["geocode"].calls.last.request.url.params["name"]) == om.MAX_CITY
+    await api.aclose()

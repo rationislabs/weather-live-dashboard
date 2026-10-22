@@ -96,3 +96,13 @@ def test_search_throttle_is_enforced_on_the_server():
     assert om.allow_search(seen, now=100.0) is True
     assert om.allow_search(seen, now=100.2) is False
     assert om.allow_search(seen, now=100.5) is True
+
+
+def test_one_client_gets_only_part_of_the_shared_lookup_budget():
+    # 0.3 s apart is still ~200 a minute: one tab could use everyone's Open-Meteo budget.
+    from weather_live import openmeteo as om
+
+    seen: dict = {}
+    allowed = [om.allow_search(seen, now=1000.0 + i) for i in range(40)]  # one a second
+    assert allowed == [True] * om.SEARCHES_PER_MINUTE + [False] * (40 - om.SEARCHES_PER_MINUTE)
+    assert om.allow_search(seen, now=1061.0) is True

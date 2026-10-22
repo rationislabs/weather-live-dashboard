@@ -10,7 +10,9 @@ served, marked stale, rather than an error.
 from __future__ import annotations
 
 import asyncio
+import bisect
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +22,7 @@ import httpx
 from .config import Settings
 
 PAUSE_AFTER_429 = 60.0
+MAX_CITY = 100  # characters; the longest place names are well under it
 
 
 class UpstreamError(Exception):
@@ -28,6 +31,10 @@ class UpstreamError(Exception):
 
 class RateLimited(UpstreamError):
     """HTTP 429 from Open-Meteo."""
+
+
+class Busy(UpstreamError):
+    """Too many new lookups from everyone together; nothing was asked upstream."""
 
 
 @dataclass(frozen=True)
@@ -45,26 +52,61 @@ class _Entry:
 
 class Cache:
     def __init__(
-        self, ttl: float, stale_max: float, max_entries: int, clock: Callable[[], float] = time.time
+        self,
+        ttl: float,
+        stale_max: float,
+        max_entries: int,
+        clock: Callable[[], float] = time.time,  # entry times, shown on the page
+        fetches_per_minute: int = 120,
+        fetches_per_hour: int = 4000,
+        fetches_per_day: int = 8000,
+        limit_clock: Callable[[], float] = time.monotonic,  # never steps back
     ) -> None:
+        self.limit_clock = limit_clock
         self.ttl, self.stale_max, self.max_entries, self.clock = ttl, stale_max, max_entries, clock
-        self._entries: dict[tuple, _Entry] = {}  # insertion order = age order
+        # Open-Meteo's free tier allows 600 a minute, 5,000 an hour, 10,000 a day per IP.
+        # ponytail: per process; one client may use the whole budget (cached cities still work)
+        self.fetches_per_minute, self.fetches_per_hour = fetches_per_minute, fetches_per_hour
+        self.fetches_per_day = fetches_per_day
+        self._entries: dict[tuple, _Entry] = {}  # order = last use, least recent first
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._paused_until: dict[str, float] = {}
+        self._fetches: deque[float] = deque()  # when each upstream call of the last day started
 
     def __len__(self) -> int:
         return len(self._entries)
+
+    def forget(self, key: tuple) -> None:
+        """Drop an answer that turned out unusable: the next request asks again."""
+        self._entries.pop(key, None)
 
     async def get(self, key: tuple, fetch: Callable[[], Awaitable[dict[str, Any]]]) -> Result:
         """`key[0]` names the endpoint; the 429 pause applies per endpoint."""
         now = self.clock()
         entry = self._entries.get(key)
         if entry and now - entry.at < self.ttl:
+            self._entries[key] = self._entries.pop(key)  # used: last to be evicted
             return Result(entry.data, entry.at, stale=False)
         if now < self._paused_until.get(key[0], 0.0):
             return self._stale_or_raise(entry, now, RateLimited(f"{key[0]}: paused after HTTP 429"))
         task = self._inflight.get(key)
         if task is None:
+            # Everyone together: a script cycling through city names must not spend the free
+            # quota (then a 429 for every visitor). Over the limit, a stale copy still serves.
+            tick = self.limit_clock()
+            while self._fetches and self._fetches[0] <= tick - 86400:
+                self._fetches.popleft()
+            limits = (
+                (60, self.fetches_per_minute),
+                (3600, self.fetches_per_hour),
+                (86400, self.fetches_per_day),
+            )
+            if any(
+                len(self._fetches) - bisect.bisect_right(self._fetches, tick - s) >= n
+                for s, n in limits
+            ):
+                return self._stale_or_raise(entry, now, Busy("busy: too many new lookups"))
+            self._fetches.append(tick)
             task = asyncio.create_task(self._refresh(key, fetch))
             self._inflight[key] = task
             task.add_done_callback(lambda _done: self._inflight.pop(key, None))
@@ -214,23 +256,33 @@ class OpenMeteo:
         )
 
     async def search(self, text: str, count: int = 5) -> list[Place]:
-        name = text.strip()
+        name = text.strip()[:MAX_CITY]  # a cache key and an upstream parameter
         if not name:
             return []
+        key = ("geocode", name.lower(), count)
         result = await self.cache.get(
-            ("geocode", name.lower(), count),
-            lambda: _get_json(self.http, GEOCODE, geocode_params(name, count)),
+            key, lambda: _get_json(self.http, GEOCODE, geocode_params(name, count))
         )
-        return [
-            Place(
-                r["name"],
-                r.get("admin1", ""),
-                r.get("country_code", ""),
-                r["latitude"],
-                r["longitude"],
-            )
-            for r in result.data.get("results", [])
-        ]
+        try:
+            return [
+                Place(
+                    _text(r["name"]),
+                    str(r.get("admin1") or ""),
+                    str(r.get("country_code") or ""),
+                    float(r["latitude"]),
+                    float(r["longitude"]),
+                )
+                for r in result.data.get("results", [])
+            ]
+        except (KeyError, TypeError, AttributeError, ValueError) as e:  # the page shows its message
+            self.cache.forget(key)
+            raise UpstreamError("geocoding: unexpected answer") from e
+
+
+def _text(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"expected a name, got {value!r}")
+    return value
 
 
 def match_place(places: list[Place], text: str) -> Place | None:
@@ -253,11 +305,19 @@ def city_from_timezone(tz: str) -> str | None:
 
 
 SEARCH_GAP = 0.3  # seconds; the browser throttles at 0.4, this holds if a client does not
+SEARCHES_PER_MINUTE = 30  # one client's share of the shared lookup budget (120 a minute)
 
 
 def allow_search(seen: dict, now: float) -> bool:
     """Server-side search throttle for one client (`seen` lives with the client)."""
     if now - seen.get("last", float("-inf")) < SEARCH_GAP:
         return False
+    recent = seen.setdefault("recent", deque())
+    while recent and recent[0] <= now - 60:
+        recent.popleft()
+    seen["capped"] = len(recent) >= SEARCHES_PER_MINUTE  # the page says why
+    if seen["capped"]:
+        return False
     seen["last"] = now
+    recent.append(now)
     return True

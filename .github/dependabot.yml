@@ -14,3 +14,11 @@ updates:
     groups:
       python:
         patterns: ["*"]
+  # Base images are pinned by digest; these keep the digests moving.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        patterns: ["*"]

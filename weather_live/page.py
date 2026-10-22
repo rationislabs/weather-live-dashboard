@@ -39,18 +39,29 @@ def url(city: str, units: str, theme: str) -> str:
     return "/?" + urlencode({"city": city, "units": units, "theme": theme})
 
 
+async def _lookup(text: str) -> om.Place | None:
+    return om.match_place(await api.search(text.split(",")[0]), text)
+
+
 async def _find(text: str) -> om.Place | None:
     try:
-        return om.match_place(await api.search(text.split(",")[0]), text)
+        return await _lookup(text)
     except om.UpstreamError:
         return None
 
 
 async def resolve(text: str, default: str) -> tuple[om.Place | None, str]:
     """The place for `text`, else the default, plus a notice if it fell back."""
-    if text and (place := await _find(text)):
-        return place, ""
-    notice = f"No place called '{text}'. Showing {default}." if text else ""
+    notice = ""
+    if text:
+        try:
+            if place := await _lookup(text):
+                return place, ""
+        except om.Busy:
+            notice = f"Too many lookups right now. Showing {default}; try again in a minute."
+        except om.UpstreamError:
+            pass
+        notice = notice or f"No place called '{text}'. Showing {default}."
     return await _find(default), notice
 
 
@@ -119,17 +130,34 @@ def header(place: om.Place | None, units: str, theme: str) -> None:
 
         seen: dict = {}  # this client's last search, for the server-side throttle
 
+        def say(text: str) -> None:
+            hits.clear()
+            with hits:
+                ui.label(text).classes("text-sm")
+
         async def suggest() -> None:
             if not om.allow_search(seen, time.monotonic()):
+                if seen.get("capped"):
+                    seen["seq"] = seen.get("seq", 0) + 1  # an older answer must not land
+                    say("Too many searches. Wait a minute, then type again.")
                 return
-            hits.clear()
             text = (box.value or "").strip()
+            seen["seq"] = mine = seen.get("seq", 0) + 1
             if len(text) < 2:
+                hits.clear()
                 return
             try:
                 places = await api.search(text)
-            except om.UpstreamError:
+            except om.UpstreamError as e:
+                if seen["seq"] == mine:  # never leave an older search's places on screen
+                    if isinstance(e, om.Busy):
+                        say("Too many lookups right now. Try again in a minute.")
+                    else:
+                        hits.clear()
                 return
+            if seen["seq"] != mine:  # a newer search started while this one waited
+                return
+            hits.clear()
             with hits:
                 if not places:
                     ui.label(f"No place called '{text}'").classes("text-sm")
@@ -249,6 +277,7 @@ def footer() -> None:
 @ui.page("/")
 async def index(city: str = "", units: str = "metric", theme: str = "light") -> None:
     settings = config.load()
+    city = city[: om.MAX_CITY]  # part of the notice; search cuts it short as well
     units = units if units in om.UNIT_PARAMS else "metric"
     theme = theme if theme in charts.PALETTE else "light"
     ui.dark_mode(theme == "dark")

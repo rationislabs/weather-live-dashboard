@@ -118,3 +118,22 @@ def test_spread_caption_when_members_agree_and_when_short():
         charts.spread_caption({"time": [], "p10": [], "p90": []})
         == "No ensemble data for this place."
     )
+
+
+def test_day_ticks_fall_on_the_first_hour_of_each_day_even_on_dst_days():
+    # A 23- or 25-hour day would shift a fixed every-24th tick; in a zone that springs
+    # forward at midnight a day has no 00:00 at all (23:00 is followed by 01:00).
+    hours = [
+        charts._hour(t)
+        for t in (
+            "2026-03-28T22:00",
+            "2026-03-28T23:00",
+            "2026-03-29T01:00",
+            "2026-03-29T02:00",  # no 00:00 that day
+            "2026-03-30T00:00",
+            "2026-03-30T01:00",
+        )
+    ]
+    ticks = charts._day_ticks("light", hours)
+    assert "interval" not in ticks
+    assert ticks[":interval"] == "(i) => [0, 2, 4].includes(i)"
