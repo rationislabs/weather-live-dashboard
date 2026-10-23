@@ -7,7 +7,11 @@ The centrepiece is the **forecast spread**: 51 runs of the ECMWF ensemble, drawn
 wider the band, the less the runs agree, so you can see which days the forecast is confident
 about and which it is guessing.
 
-<!-- screenshots: light, dark, phone -->
+![Vienna: current conditions, the 7-day forecast, the ensemble spread and air quality](docs/screenshots/vienna-light.png)
+
+| Dark theme | City search | Phone |
+|---|---|---|
+| ![Graz in the dark theme](docs/screenshots/graz-dark.png) | ![Search suggestions while typing](docs/screenshots/search.png) | ![The page at phone width](docs/screenshots/phone.png) |
 
 ## Run it
 
