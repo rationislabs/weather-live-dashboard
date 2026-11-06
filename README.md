@@ -69,3 +69,5 @@ The URL holds the whole view, so a link opens the same thing:
 [Weather data by Open-Meteo.com](https://open-meteo.com/), licensed
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Place search uses
 [GeoNames](https://www.geonames.org/) through Open-Meteo's geocoding API.
+
+This project was built with AI assistance.
